@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<title>Fathom Test</title>
+		<script>
+<!--
+	function revealPunchLine() {
+		var	strButtonID = "btn", strPunchLineID = "punchLine"
+		   ,strPunchline = "{JOKE_PUNCHLINE}"
+		   ,punchLine = document.getElementById(strPunchLineID)
+		   ,button = document.getElementById(strButtonID);
+		if ( punchLine != undefined ) {
+			punchLine.innerHTML = strPunchline;
+			punchLine.style.display = "block";
+		}
+		if ( button != undefined ) {
+			button.style.display = "none";
+		}
+	}
+// -->
+		</script>
+		<style>
+.button {
+	font-size:12pt;
+	height:64px;
+	width:127px;
+}
+.page {
+	background-color:#0000ff;
+	text-align:center;
+}
+.instructions {
+	background-color:#dddddd;
+	border:1px solid #00ffff;
+	padding: 8px 8px 8px 8px;
+}
+.joketext {
+	background-color:#000033;
+	border:1px solid #ffffff;
+	padding: 8px 8px 8px 8px;
+	color:#ffff00;
+	font-size:12pt;
+}
+.punchline {
+	background-color:#003300;
+	border:1px solid #00ff00;
+	padding: 8px 8px 8px 8px;
+	color:#00ff00;
+	font-size:12pt;
+	display:none;
+}
+		</style>
+	</head>
+	<body class="page">
+		<p class="instructions">
+			This is joke number #{JOKE_NUMBER}.  There are {TOTAL_JOKES} jokes remaining.<br />
+			A different joke will be picked at random each time the page is loaded.<br />Click the 'Reveal Punchline' button to show the punchline.
+		</p>
+		<hr width="50%"/>
+		<p class="joketext">
+			{JOKE_TEXT}
+		</p>
+		<hr width="50%"/>
+		<p id="punchLine" class="punchline"></p>
+		<button id="btn" onclick="revealPunchLine();"
+				type="button" class="button">
+			Reveal<br />Punchline
+		</button>				
+	</body>
+</html>
