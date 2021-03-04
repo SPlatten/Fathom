@@ -47,10 +47,55 @@ try{
 	   ,strThisFile				= "root.js"
 	/*URL*/
        ,url						= require("url");	
+/**
+ * Process the next type from the passed types object
+ * Parameters:
+ *	objTypes, types object to process
+ *  intInsertID, optional insert ID for type
+ */
+function addTypeAndJokes(objTypes, intInsertID) {
+ 	if ( typeof objTypes != "object" ) {
+		return;
+   	}
+	/*Find first or next iterator to process according to tiNext*/
+	var objType, strType;
+	for( strType in objTypes ) {
+		if ( objTypes[strType].intInsertID == undefined ) {
+			objType = objTypes[strType];
+			objType.intInsertID = intInsertID;
+			break;
+		}
+	}
+	if ( objType == undefined ) {
+	/*Nothing to do!*/
+		return;
+	}
+	console.log("Processing type " + defs.GREEN + strType + defs.RESET
+		+ " inserted with ID "
+		+ defs.GREEN + objType.intInsertID + defs.RESET
+		+ " inserting " + defs.GREEN + objType.aryJokes.length 
+		+ defs.RESET + " jokes into database");
+	/*Insert joke entries into database database*/
+	for( var j in objType.aryJokes) {
+ 		var objJoke = objType.aryJokes[j]
+		   ,strTypeSelect = "SELECT `id` FROM " + TABLE_TYPES + " WHERE "
+				+ "`type`=?"
+		   ,strJokeInsert = "INSERT INTO " + TABLE_JOKES + " ("
+				+ "`id`, `type`, `setup`, `punchline`) VALUES ("
+				+ "?, ?, ?, ?)";
+		objMySQL.transaction(strJokeInsert, [objJoke['id']
+											,objType.intInsertID
+											,objJoke['setup']
+											,objJoke['punchline']]
+											,function(aryRows, aryFields) {
+			process.stdout.write(".");
+		});
+	}		
+}				   
 /**             
  * Function:
  *  defaultHandler
- * Paramters:
+ * Parameters:
  *  request, the client request
  *  response, the server response
  */       
@@ -173,7 +218,8 @@ function defaultHandler(request, response) {
 				file = file.replace(PLACEHOLDER_TOTAL_JOKES, aryJokes.length);
 				file = file.replace(PLACEHOLDER_JOKE_NUMBER, objRndJoke["idx"]);
 				file = file.replace(PLACEHOLDER_JOKE_TEXT, objRndJoke["setup"]);
-				file = file.replace(PLACEHOLDER_PUNCHLINE, objRndJoke["punchline"]);
+				file = file.replace(PLACEHOLDER_PUNCHLINE
+								   ,objRndJoke["punchline"]);
 			  	response.writeHead(200, headers);
 			  	response.write(file, "binary");
 			  	response.end();
@@ -208,41 +254,43 @@ function importJSON() {
 			console.log(defs.RED + err + defs.RESET);
 			return;
 		}
+		var strTypeInsert = "INSERT INTO " + TABLE_TYPES + " (`type`)"
+				  + " VALUES (?)";		
 	/*Translate file into a JavaScript array*/
 		aryJokes = eval(file);
-	// /*Display summary of file content*/
-	// 	console.log("Read " + aryJokes.length + " jokes from: "
-	// 										  + JSON_FILE_SPEC);
-	//
-	// 	var strTypeSelect = "SELECT `id` FROM " + TABLE_TYPES + " WHERE "
-	// 					  + "`type`=?"
-	// 	   ,strJokeInsert = "INSERT INTO " + TABLE_JOKES + " ("
-	// 					  + "`id`, `type`, `setup`, `punchline`) VALUES ("
-	// 					  + "?, " + strTypeSelect + ", ?, ?)"
-	// 	   ,strTypeInsert = "INSERT INTO " + TABLE_TYPES + " (`type`)"
-	// 					  + " VALUES (?)";
-	// /*On pass 1, create entries in types table
-	//   On pass 2, create entries in jokes table*/
-	//     for( var p=1; p<=2; p++ ) {
-	// 		for( var i in aryJokes) {
-	// 			var objJoke = aryJokes[i];
-	// 			if ( p == 1 ) {
-	// 				var strType = objJoke['type'];
-	// 				objMySQL.transaction(strTypeSelect, [strType]
-	// 									,function(aryRows, aryFields) {
-	// 					if ( aryRows.length == 0 ) {
-	// /*Type not present, create now*/
-	// 						objMySQL.transaction(strTypeInsert, [strType]
-	// 											,function(aryRows, aryFields) {
-	// 							console.dir(aryRows);
-	// 							console.dir(aryFields);
-	// 						});
-	// 					}
-	// 				});
-	// 			} else {
-	// 			}
-	// 		}
-	//  	    }
+		console.log(defs.RED + "No Jokes, importing from file!" + defs.RESET);
+	/*Display summary of file content*/
+		console.log("Analysing file " + defs.GREEN + JSON_FILE_SPEC 
+			+ defs.RESET);
+ 	    console.log("File contains " + defs.GREEN + aryJokes.length 
+			+ defs.RESET + " jokes");
+	    var intMaxLength = 0, objTypes = {};
+		for( var j in aryJokes ) {
+			var objJoke = aryJokes[j]
+			   ,strType = objJoke["type"];
+		    if ( typeof strType == "string" && strType.length > 0 ) {
+				var intUsage = 0;
+				if ( typeof objTypes[strType] == "object" ) {
+					intUsage = objTypes[strType].intUsage;
+				} else {
+					objTypes[strType] = {"aryJokes":[],"intUsage":0};
+				}
+				objTypes[strType].intUsage++;
+				if ( intMaxLength < strType.length ) {
+					intMaxLength = strType.length;
+				}
+				objTypes[strType]['aryJokes'].push(objJoke);
+		    }
+		}
+		console.log("The following types were discovered:");	
+
+		for( var strType in objTypes ) {
+	/*Insert type into database*/
+			objMySQL.transaction(strTypeInsert, [strType]
+								,function(objResult) {
+				addTypeAndJokes(objTypes, objResult['insertId']);
+			});
+		}
 	});
 }
 /**
@@ -267,7 +315,7 @@ function mariaDBconnectPrimtive(intIdx, cbRoutine, objParams) {
 			pool = mysqlPool; 
 		}
 		if ( pool == undefined ) {
-			pool = mysql.createPool({host:"localhost"/*This is for osX //strServerHost*/
+			pool = mysql.createPool({host:strServerHost
 								    ,port:"3306"
 								    ,user:"root"
 							 	,password:"resuocra"
@@ -367,48 +415,45 @@ defs.RESET);
 	}
 	/*THE DATABASE IMPLEMENTATION REQUIRES A LOCAL INSTALLATION OF MARIADB OR
 	  MYSQL, THE DATABASE IMPLEMENTATION NEEDS MORE WORK!*/
-	// /*Create database manager*/
-	//     objMySQL = new dbman.clsDBman("MySQL",  mysqlConnect, mysql, eh);
-	// /*Does database exist!*/
-	// var strSQL = "SELECT SCHEMA_NAME"
-	// 		   + " FROM INFORMATION_SCHEMA.SCHEMATA"
-	// 		   + " WHERE SCHEMA_NAME=?";
-	// objMySQL.transaction(strSQL, [DATABASE_NAME], function(aryRows, aryFields) {
-	// 	if ( aryRows.length == 0 ) {
-	// /*No, create database and tables now*/
-	// 		console.log(defs.RED + "Database doesn't exist" + defs.RESET);
-	// 		strSQL = "CREATE DATABASE IF NOT EXISTS " + DATABASE_NAME;
-	// 		objMySQL.transaction(strSQL, null, function(aryRows, aryFields) {
-	// 			console.log(DATABASE_NAME + "...Database created");
-	// /*Create database tables*/
-	// 			strSQL = "CREATE TABLE " + TABLE_JOKES + " ("
-	//   		 + "`id` INT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT 'Primary key',"
-	//   		 + "`type` INT UNSIGNED NOT NULL COMMENT 'Look up into table tblTypes',"
-	//   		 + "`setup` VARCHAR(128) NOT NULL COMMENT 'Joke question\n',"
-	//   	     + "`punchline` VARCHAR(80) NOT NULL COMMENT 'Joke punchline',"
-	//   	     + "PRIMARY KEY (`id`),"
-	// 	 + "UNIQUE INDEX `id_UNIQUE` (`id` ASC) VISIBLE);";
-	// 			objMySQL.transaction(strSQL, []
-	// 							    ,function(aryRows, aryFields) {
-	// 				console.log(TABLE_JOKES + "...Table created");
-	// 				strSQL = "CREATE TABLE " + TABLE_TYPES + " ("
-	// 	 + "`id` INT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT 'Primary key',"
-	//      + "`type` VARCHAR(16) NOT NULL COMMENT 'Type description',"
-	// 	 + "PRIMARY KEY (`id`),"
-	// 	 + "UNIQUE INDEX `id_UNIQUE` (`id` ASC) VISIBLE,"
-	// 	 + "UNIQUE INDEX `type_UNIQUE` (`type` ASC) VISIBLE);";
-	// 	 			objMySQL.transaction(strSQL, []
-	// 					    		,function(aryRows, aryFields) {
-	// 					console.log(TABLE_TYPES + "...Table created");
-	// 					setTimeout(importJSON, 1000);
-	// 				});
-	// 			});
-	// 		});
-	// 	}
-	// });
-	/*FOR THE DATABASE IMPLEMENTATION UNCOMMENT THE ABOVE & COMMENT OUT THE LINE
-	  BELOW*/
-	importJSON();
+	/*Create database manager*/
+	    objMySQL = new dbman.clsDBman("MySQL",  mysqlConnect, mysql, eh);
+	/*Does database exist!*/
+	var strSQL = "SELECT SCHEMA_NAME"
+			   + " FROM INFORMATION_SCHEMA.SCHEMATA"
+			   + " WHERE SCHEMA_NAME=?";
+	objMySQL.transaction(strSQL, [DATABASE_NAME], function(aryRows, aryFields) {
+		if ( aryRows.length == 0 ) {
+	/*No, create database and tables now*/
+			console.log(defs.RED + "Database doesn't exist" + defs.RESET);
+			strSQL = "CREATE DATABASE IF NOT EXISTS " + DATABASE_NAME;
+			objMySQL.transaction(strSQL, null, function(aryRows, aryFields) {
+				console.log(DATABASE_NAME + "...Database created");
+	/*Create database tables*/
+				strSQL = "CREATE TABLE " + TABLE_JOKES + " ("
+	  		 + "`id` INT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT 'Primary key',"
+	  		 + "`type` INT UNSIGNED NOT NULL COMMENT 'Look up into table tblTypes',"
+	  		 + "`setup` VARCHAR(128) NOT NULL COMMENT 'Joke question\n',"
+	  	     + "`punchline` VARCHAR(128) NOT NULL COMMENT 'Joke punchline',"
+	  	     + "PRIMARY KEY (`id`),"
+		 + "UNIQUE INDEX `id_UNIQUE` (`id` ASC) VISIBLE);";
+				objMySQL.transaction(strSQL, []
+								    ,function(aryRows, aryFields) {
+					console.log(TABLE_JOKES + "...Table created");
+					strSQL = "CREATE TABLE " + TABLE_TYPES + " ("
+		 + "`id` INT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT 'Primary key',"
+	     + "`type` VARCHAR(16) NOT NULL COMMENT 'Type description',"
+		 + "PRIMARY KEY (`id`),"
+		 + "UNIQUE INDEX `id_UNIQUE` (`id` ASC) VISIBLE,"
+		 + "UNIQUE INDEX `type_UNIQUE` (`type` ASC) VISIBLE);";
+		 			objMySQL.transaction(strSQL, []
+						    		,function(aryRows, aryFields) {
+						console.log(TABLE_TYPES + "...Table created");
+						setTimeout(importJSON, 100);									
+					});
+				});
+			});
+		}
+	});
 	/*Listen for HTTP clients*/
 	var httpServer = new httpsvr.clsHTTPsvr()
 	   ,app = http.createServer(sessionWrapper);
